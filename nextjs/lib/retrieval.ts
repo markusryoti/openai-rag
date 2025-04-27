@@ -50,6 +50,15 @@ const documents: Document[] = [
       url: "https://example.com/rag-paper",
     },
   },
+  {
+    id: "6",
+    content:
+      "Being a doctor is extremely demanding and it takes a special person to do the work",
+    metadata: {
+      source: "Me",
+      url: "https://google.com",
+    },
+  },
 ];
 
 export async function getRelevantDocuments(query: string): Promise<Document[]> {

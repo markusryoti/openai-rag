@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     
 ${context}
 
-If the question cannot be answered based on the context, say that you don't know and only use the information provided in the context.`;
+If the question cannot be answered based on the context, say that you don't know and only use the information provided in the context. But if the information is included in the context, feel free to add more details and explanation outside of the context.`;
 
     // Create a new readable stream
     const stream = new ReadableStream({
