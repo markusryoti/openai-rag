@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: ankane/pgvector
+    container_name: rag_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ragdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./embedding-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  fastapi:
+    build: ./embedding-service
+    container_name: rag_fastapi
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/ragdb
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nextjs:
+    build: ./nextjs
+    container_name: rag_nextjs
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - fastapi
+
+volumes:
+  db-data:

@@ -4,6 +4,7 @@ export interface Document {
   metadata: {
     source: string;
     url?: string;
+    // eslint-disable-next-line
     [key: string]: any;
   };
 }
