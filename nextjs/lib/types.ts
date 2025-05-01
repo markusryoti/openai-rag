@@ -1,7 +1,7 @@
 export interface Document {
   id: string;
   content: string;
-  metadata: {
+  metadata?: {
     source: string;
     url?: string;
     // eslint-disable-next-line

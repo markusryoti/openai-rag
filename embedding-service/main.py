@@ -1,9 +1,13 @@
 from fastapi import FastAPI, UploadFile, File
+# from fastapi.logger import logger
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
+import io
+import traceback
 import psycopg2
 from pgvector.psycopg2 import register_vector
 import pdfplumber
+import logging
 
 # Initialize FastAPI
 app = FastAPI()
@@ -14,6 +18,9 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 # Connect to Postgres
 conn = psycopg2.connect(dsn="postgresql://postgres:password@postgres:5432/ragdb")
 register_vector(conn)
+
+logger = logging.getLogger("uvicorn.error")
+logger.setLevel(logging.DEBUG)
 
 class EmbedRequest(BaseModel):
     text: str
@@ -52,6 +59,9 @@ def index():
 @app.post("/embed")
 def embed_text(req: EmbedRequest):
     embedding = model.encode(req.text).tolist()
+    cur = conn.cursor()
+    cur.execute(f"insert into documents (content, embedding) values (%s, %s)", (req.text, embedding))
+    conn.commit()
     return {"embedding": embedding}
 
 @app.post("/search")
@@ -59,7 +69,7 @@ def search_text(req: SearchRequest):
     cur = conn.cursor()
     query_embedding = model.encode(req.query).tolist()
     cur.execute(
-        "SELECT content FROM documents ORDER BY embedding <-> %s LIMIT %s",
+        "SELECT content FROM documents ORDER BY embedding <-> %s::vector LIMIT %s",
         (query_embedding, req.top_k)
     )
     rows = cur.fetchall()
@@ -68,28 +78,44 @@ def search_text(req: SearchRequest):
 
 @app.post("/upload-pdf")
 async def upload_pdf(file: UploadFile = File(...)):
-    contents = await file.read()
+    try:
+        logger.info("starting to read file")
 
-    # Parse PDF
-    with pdfplumber.open(io.BytesIO(contents)) as pdf:
+        contents = await file.read()
+
+        logger.info("contents read")
+
         full_text = ""
-        for page in pdf.pages:
-            full_text += page.extract_text() + "\n"
 
-    # Split into chunks
-    chunks = split_text(full_text)
+        # Parse PDF
+        with pdfplumber.open(io.BytesIO(contents)) as pdf:
+            for page in pdf.pages:
+                full_text += page.extract_text() + "\n"
 
-    # Insert into database
-    cur = conn.cursor()
+        logger.info("text extracted")
 
-    for chunk in chunks:
-        embedding = model.encode(chunk).tolist()
-        cur.execute(
-            "INSERT INTO documents (content, embedding) VALUES (%s, %s)",
-            (chunk, embedding)
-        )
+        # Split into chunks
+        chunks = split_text(full_text)
 
-    conn.commit()
+        logger.info("chunks created")
 
-    return {"message": f"Uploaded and indexed {len(chunks)} chunks from PDF"}
+        # Insert into database
+        cur = conn.cursor()
+
+        for chunk in chunks:
+            embedding = model.encode(chunk).tolist()
+            cur.execute(
+                "INSERT INTO documents (content, embedding) VALUES (%s, %s)",
+                (chunk, embedding)
+            )
+
+        logger.info("insert commands done, committing tx")
+
+        conn.commit()
+
+        return {"message": f"Uploaded and indexed {len(chunks)} chunks from PDF"}
+
+    except Exception as e:
+        traceback.print_exc()
+        return {"error": str(e)}
 

@@ -19,6 +19,10 @@ export async function POST(req: Request) {
     // Create a context from the retrieved documents
     const context = relevantDocs.map((doc) => doc.content).join("\n\n");
 
+    console.log(context);
+
+    return new Response(null);
+
     // Create a system message with the context
     const systemMessage = `You are a helpful assistant that answers questions based on the following context:
     
