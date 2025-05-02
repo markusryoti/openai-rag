@@ -44,13 +44,19 @@ def split_text(text, max_length=800, overlap=200):
         if end < len(text):
             last_period = chunk.rfind('.')
             if last_period > 0.5 * max_length:
-                chunk = chunk[:last_period+1]
+                chunk = chunk[:last_period + 1]
                 end = start + len(chunk)
 
         chunks.append(chunk.strip())
-        start = end - overlap  # Overlap
+
+        next_start = end - overlap
+        if next_start <= start:
+            next_start = start + 1  # ensure progress
+
+        start = next_start
 
     return chunks
+
 
 @app.get("/")
 def index():
