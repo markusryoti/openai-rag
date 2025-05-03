@@ -1,19 +1,19 @@
+from http.client import HTTPException
 from fastapi import FastAPI, UploadFile, File
-# from fastapi.logger import logger
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
-import io
-import traceback
+import os
 import psycopg2
 from pgvector.psycopg2 import register_vector
-import pdfplumber
 import logging
+from PyPDF2 import PdfReader
 
 # Initialize FastAPI
 app = FastAPI()
 
 # Load the model once
-model = SentenceTransformer('all-MiniLM-L6-v2')
+MODEL_NAME = "all-MiniLM-L6-v2"
+model = SentenceTransformer(MODEL_NAME)
 
 # Connect to Postgres
 conn = psycopg2.connect(dsn="postgresql://postgres:password@postgres:5432/ragdb")
@@ -29,34 +29,8 @@ class SearchRequest(BaseModel):
     query: str
     top_k: int = 3
 
-def split_text(text, max_length=800, overlap=200):
-    chunks = []
-    start = 0
-
-    while start < len(text):
-        end = start + max_length
-        if end > len(text):
-            end = len(text)
-
-        chunk = text[start:end]
-
-        # Try not to cut in middle of sentence
-        if end < len(text):
-            last_period = chunk.rfind('.')
-            if last_period > 0.5 * max_length:
-                chunk = chunk[:last_period + 1]
-                end = start + len(chunk)
-
-        chunks.append(chunk.strip())
-
-        next_start = end - overlap
-        if next_start <= start:
-            next_start = start + 1  # ensure progress
-
-        start = next_start
-
-    return chunks
-
+class Message(BaseModel):
+    detail: str
 
 @app.get("/")
 def index():
@@ -75,53 +49,76 @@ def search_text(req: SearchRequest):
     cur = conn.cursor()
     query_embedding = model.encode(req.query).tolist()
     cur.execute(
-        "SELECT content FROM documents ORDER BY embedding <-> %s::vector LIMIT %s",
+        "SELECT id, content FROM documents ORDER BY embedding <-> %s::vector LIMIT %s",
         (query_embedding, req.top_k)
     )
     rows = cur.fetchall()
-    contents = [row[0] for row in rows]
+    contents = [{"id": str(row[0]), "content": row[1]} for row in rows]
     return {"results": contents}
 
-@app.post("/upload-pdf")
+@app.post("/upload-pdf", response_model=Message)
 async def upload_pdf(file: UploadFile = File(...)):
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Invalid file format. Only PDF files are allowed.")
+
     try:
-        logger.info("starting to read file")
-
         contents = await file.read()
+        temp_file_path = f"temp_{file.filename}"
+        with open(temp_file_path, "wb") as f:
+            f.write(contents)
 
-        logger.info("contents read")
+        chunks = load_and_chunk_pdf(temp_file_path)
+        embeddings = generate_embeddings(chunks, model)
 
-        full_text = ""
+        try:
+            store_embeddings(conn, chunks, embeddings)
+            return {"detail": f"Successfully processed '{file.filename}' and stored embeddings in PostgreSQL."}
+        except psycopg2.Error as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {e}")
+        finally:
+            os.remove(temp_file_path)
 
-        # Parse PDF
-        with pdfplumber.open(io.BytesIO(contents)) as pdf:
-            for page in pdf.pages:
-                full_text += page.extract_text() + "\n"
-
-        logger.info("text extracted")
-
-        # Split into chunks
-        chunks = split_text(full_text)
-
-        logger.info("chunks created")
-
-        # Insert into database
-        cur = conn.cursor()
-
-        for chunk in chunks:
-            embedding = model.encode(chunk).tolist()
-            cur.execute(
-                "INSERT INTO documents (content, embedding) VALUES (%s, %s)",
-                (chunk, embedding)
-            )
-
-        logger.info("insert commands done, committing tx")
-
-        conn.commit()
-
-        return {"message": f"Uploaded and indexed {len(chunks)} chunks from PDF"}
-
+    except HTTPException as http_exc:
+        raise http_exc
     except Exception as e:
-        traceback.print_exc()
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
+def load_and_chunk_pdf(pdf_path, chunk_size=500, chunk_overlap=50):
+    try:
+        with open(pdf_path, 'rb') as pdf_file:
+            reader = PdfReader(pdf_file)
+            text = ""
+            for page in reader.pages:
+                page_text = page.extract_text() + "\n"
+                if page_text:
+                    text += page_text.replace('\x00', '') + "\n"
+
+            chunks = []
+            start = 0
+            while start < len(text):
+                end = min(start + chunk_size, len(text))
+                chunk = text[start:end]
+                chunks.append(chunk)
+                start += chunk_size - chunk_overlap
+            return chunks
+        
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"File not found: {pdf_path}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading PDF: {e}")
+
+def generate_embeddings(chunks, model):
+    embeddings = model.encode(chunks)
+    return embeddings
+
+def store_embeddings(conn, chunks, embeddings):
+    cur = conn.cursor()
+    try:
+        for chunk, embedding in zip(chunks, embeddings):
+            cur.execute("INSERT INTO documents (content, embedding) VALUES (%s, %s)", (chunk, embedding))
+        conn.commit()
+    except psycopg2.Error as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error storing embeddings: {e}")
+    finally:
+        cur.close()

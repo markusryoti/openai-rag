@@ -7,7 +7,7 @@ export async function addTextEmbedding(formData: FormData) {
     throw new Error("No text provided");
   }
 
-  const res = await fetch("http://fastapi:8000/embed", {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_EMBEDDINGS_API}/embed`, {
     method: "POST",
     body: JSON.stringify({ text }),
     headers: {
@@ -32,10 +32,13 @@ export async function addPdfEmbedding(formData: FormData) {
 
   console.log("new form data", newForm);
 
-  const res = await fetch("http://fastapi:8000/upload-pdf", {
-    method: "POST",
-    body: newForm,
-  });
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_EMBEDDINGS_API}/upload-pdf`,
+    {
+      method: "POST",
+      body: newForm,
+    }
+  );
 
   const data = await res.json();
 

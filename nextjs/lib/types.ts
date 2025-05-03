@@ -1,5 +1,5 @@
 export interface Document {
-  id: string;
+  id?: string;
   content: string;
   metadata?: {
     source: string;

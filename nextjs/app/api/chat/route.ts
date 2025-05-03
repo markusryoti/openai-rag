@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
     console.log(context);
 
-    return new Response(null);
+    // return new Response(null);
 
     // Create a system message with the context
     const systemMessage = `You are a helpful assistant that answers questions based on the following context:
