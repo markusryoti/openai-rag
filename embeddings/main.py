@@ -36,13 +36,13 @@ class Message(BaseModel):
 def index():
     return "hello"
 
-@app.post("/embed")
+@app.post("/embed", response_model=Message)
 def embed_text(req: EmbedRequest):
-    embedding = model.encode(req.text).tolist()
-    cur = conn.cursor()
-    cur.execute(f"insert into documents (content, embedding) values (%s, %s)", (req.text, embedding))
-    conn.commit()
-    return {"embedding": embedding}
+    chunks = generate_chunks(req.text, chunk_size=500, chunk_overlap=50)
+    embeddings = generate_embeddings(chunks, model)
+    store_embeddings(conn, chunks, embeddings)
+
+    return {"detail": f"Successfully processed text and stored embeddings in PostgreSQL."}
 
 @app.post("/search")
 def search_text(req: SearchRequest):
@@ -67,7 +67,8 @@ async def upload_pdf(file: UploadFile = File(...)):
         with open(temp_file_path, "wb") as f:
             f.write(contents)
 
-        chunks = load_and_chunk_pdf(temp_file_path)
+        text = load_pdf(temp_file_path)
+        chunks = generate_chunks(text, chunk_size=500, chunk_overlap=50)
         embeddings = generate_embeddings(chunks, model)
 
         try:
@@ -83,7 +84,7 @@ async def upload_pdf(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
-def load_and_chunk_pdf(pdf_path, chunk_size=500, chunk_overlap=50):
+def load_pdf(pdf_path):
     try:
         with open(pdf_path, 'rb') as pdf_file:
             reader = PdfReader(pdf_file)
@@ -94,21 +95,24 @@ def load_and_chunk_pdf(pdf_path, chunk_size=500, chunk_overlap=50):
                 if page_text:
                     text += page_text.replace('\x00', '') + "\n"
 
-            chunks = []
-            start = 0
-            
-            while start < len(text):
-                end = min(start + chunk_size, len(text))
-                chunk = text[start:end]
-                chunks.append(chunk)
-                start += chunk_size - chunk_overlap
-            
-            return chunks
+            return text
         
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"File not found: {pdf_path}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading PDF: {e}")
+
+def generate_chunks(text, chunk_size=500, chunk_overlap=50):
+    chunks = []
+    start = 0
+    
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
+        chunk = text[start:end]
+        chunks.append(chunk)
+        start += chunk_size - chunk_overlap
+    
+    return chunks    
 
 def generate_embeddings(chunks, model):
     embeddings = model.encode(chunks)

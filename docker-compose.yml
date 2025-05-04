@@ -13,7 +13,7 @@ services:
       - "5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
-      - ./embedding-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./embeddings/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -30,7 +30,7 @@ services:
       PGADMIN_DEFAULT_PASSWORD: password
 
   fastapi:
-    build: ./embedding-service
+    build: ./embeddings
     container_name: rag_fastapi
     restart: always
     ports:
@@ -42,7 +42,7 @@ services:
         condition: service_healthy
 
   nextjs:
-    build: ./nextjs
+    build: ./web
     container_name: rag_nextjs
     restart: always
     ports:
