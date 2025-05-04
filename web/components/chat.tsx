@@ -98,8 +98,8 @@ export default function ChatPage() {
           prev.map((msg) =>
             msg.id === assistantMessageId
               ? { ...msg, content: assistantMessage }
-              : msg,
-          ),
+              : msg
+          )
         );
       }
     } catch (error) {
@@ -119,8 +119,8 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50 dark:bg-gray-900">
-      <Card className="w-full max-w-2xl h-[80vh] flex flex-col">
+    <div className="flex-1 flex flex-col items-center justify-center">
+      <Card className="w-full h-full flex flex-col">
         <CardHeader className="border-b">
           <CardTitle>RAG-Powered Chat</CardTitle>
         </CardHeader>
@@ -138,7 +138,9 @@ export default function ChatPage() {
                 {messages.map((message) => (
                   <div
                     key={message.id}
-                    className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                    className={`flex ${
+                      message.role === "user" ? "justify-end" : "justify-start"
+                    }`}
                   >
                     <div
                       className={`max-w-[80%] rounded-lg px-4 py-2 ${

@@ -88,18 +88,21 @@ def load_and_chunk_pdf(pdf_path, chunk_size=500, chunk_overlap=50):
         with open(pdf_path, 'rb') as pdf_file:
             reader = PdfReader(pdf_file)
             text = ""
+
             for page in reader.pages:
-                page_text = page.extract_text() + "\n"
+                page_text = page.extract_text()
                 if page_text:
                     text += page_text.replace('\x00', '') + "\n"
 
             chunks = []
             start = 0
+            
             while start < len(text):
                 end = min(start + chunk_size, len(text))
                 chunk = text[start:end]
                 chunks.append(chunk)
                 start += chunk_size - chunk_overlap
+            
             return chunks
         
     except FileNotFoundError:
