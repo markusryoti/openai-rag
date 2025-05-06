@@ -1,46 +1,82 @@
 "use server";
 
-export async function addTextEmbedding(formData: FormData) {
+type ServerActionResponse = {
+  message?: string;
+  error?: string;
+};
+
+type ResponseOk = {
+  detail: string;
+};
+
+export async function addTextEmbedding(
+  prevState: ServerActionResponse,
+  formData: FormData
+): Promise<ServerActionResponse> {
   const text = formData.get("embedding-text");
 
   if (!text) {
-    throw new Error("No text provided");
+    return { error: "No text provided" };
   }
 
-  const res = await fetch(`${process.env.NEXT_PUBLIC_EMBEDDINGS_API}/embed`, {
-    method: "POST",
-    body: JSON.stringify({ text }),
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_EMBEDDINGS_API}/embed`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
-  const data = await res.json();
+    if (!res.ok) {
+      return { error: `Bad status from creating embeddings: ${res.status}` };
+    }
 
-  console.log(data);
+    const data = (await res.json()) as ResponseOk;
+
+    console.log(data);
+
+    return { message: data.detail };
+  } catch (e) {
+    console.error(e);
+    return { error: "Something went wrong uploading the text" };
+  }
 }
 
-export async function addPdfEmbedding(formData: FormData) {
+export async function addPdfEmbedding(
+  prevState: ServerActionResponse,
+  formData: FormData
+): Promise<ServerActionResponse> {
   const file = formData.get("pdf");
 
   if (!file) {
-    throw new Error("No file provided");
+    return { error: "No file provided" };
   }
 
-  const newForm = new FormData();
-  newForm.append("file", file);
+  try {
+    const newForm = new FormData();
 
-  console.log("new form data", newForm);
+    newForm.append("file", file);
 
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_EMBEDDINGS_API}/upload-pdf`,
-    {
-      method: "POST",
-      body: newForm,
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_EMBEDDINGS_API}/upload-pdf`,
+      {
+        method: "POST",
+        body: newForm,
+      }
+    );
+
+    if (!res.ok) {
+      return { error: `Bad status from creating embeddings: ${res.status}` };
     }
-  );
 
-  const data = await res.json();
+    const data = (await res.json()) as ResponseOk;
 
-  console.log(data);
+    console.log(data);
+
+    return { message: data.detail };
+  } catch (e) {
+    console.error(e);
+    return { error: "Something went wrong uploading the text" };
+  }
 }

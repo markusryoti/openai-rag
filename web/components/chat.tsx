@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useRef, useEffect } from "react";
 import type React from "react";
 
@@ -20,7 +21,7 @@ type Message = {
   content: string;
 };
 
-export default function ChatPage() {
+export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
