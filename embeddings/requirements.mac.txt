@@ -1,0 +1,8 @@
+fastapi
+pydantic
+uvicorn
+sentence_transformers
+psycopg2-binary
+pgvector
+python-multipart
+PyPDF2

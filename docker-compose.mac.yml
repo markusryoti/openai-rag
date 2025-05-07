@@ -30,7 +30,9 @@ services:
       PGADMIN_DEFAULT_PASSWORD: password
 
   fastapi:
-    build: ./embeddings
+    build:
+      context: ./embeddings
+      dockerfile: Dockerfile.mac
     container_name: rag_fastapi
     restart: always
     ports:
